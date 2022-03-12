@@ -35,4 +35,7 @@ require (
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1
 	go.opencensus.io v0.22.4
 	go.uber.org/zap v1.16.0
+	metrics v0.0.0-00010101000000-000000000000
 )
+
+replace metrics => ./../metrics/
