@@ -520,8 +520,8 @@ func (dht *IpfsDHT) FindProvidersAsync(ctx context.Context, key cid.Cid, count i
 	peerOut := make(chan peer.AddrInfo, chSize)
 
 	keyMH := key.Hash()
-
-	logger.Debugw("finding providers", "cid", key, "mh", loggableProviderRecordBytes(keyMH))
+	metrics.FPMonitor.NewProviderEvent(key, keyMH.String(), dht.self.String())
+	logger.Debugw("finding providers", "cid", key, "mh", keyMH.String())
 	go dht.findProvidersAsyncRoutine(ctx, keyMH, count, peerOut)
 	return peerOut
 }
@@ -538,12 +538,16 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 	}
 
 	provs := dht.ProviderManager.GetProviders(ctx, key)
+	metrics.FPMonitor.PMGotProviders(key.String())
+	logger.Debugw("GetProviders from ProviderManager", "peers", provs)
 	for _, p := range provs {
 		// NOTE: Assuming that this list of peers is unique
 		if ps.TryAdd(p) {
+
 			pi := dht.peerstore.PeerInfo(p)
 			select {
 			case peerOut <- pi:
+				metrics.FPMonitor.GotProviderFrom(key.String(), pi.String(), string(dht.self))
 			case <-ctx.Done():
 				return
 			}
@@ -564,24 +568,25 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 				ID:   p,
 			})
 
+			logger.Debugf("send Message_FIND_NODE to [%s], for [%s]", p, key.String())
+			metrics.FPMonitor.SendNodeWant(key.String(), p.String())
 			pmes, err := dht.findProvidersSingle(ctx, p, key)
+			metrics.FPMonitor.ReceiveResult(key.String(), p.String())
 			if err != nil {
 				return nil, err
 			}
-
-			logger.Debugf("%d provider entries", len(pmes.GetProviderPeers()))
 			provs := pb.PBPeersToPeerInfos(pmes.GetProviderPeers())
-			logger.Debugf("%d provider entries decoded", len(provs))
 
 			// Add unique providers from request, up to 'count'
 			for _, prov := range provs {
 				dht.maybeAddAddrs(prov.ID, prov.Addrs, peerstore.TempAddrTTL)
-				logger.Debugf("got provider: %s", prov)
+				logger.Debugf("got provider [%s] from [%s]", prov, p)
 				if ps.TryAdd(prov.ID) {
 					logger.Debugf("using provider: %s", prov)
 					select {
 					case peerOut <- *prov:
 						logger.Debugf("output provier: %s", prov)
+						metrics.FPMonitor.GotProviderFrom(key.String(), prov.ID.String(), p.String())
 						metrics.BDMonitor.FoundProvide(key.String(), prov.ID.String())
 					case <-ctx.Done():
 						logger.Debug("context timed out sending more providers")
@@ -597,7 +602,13 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 			// Give closer peers back to the query to be queried
 			closer := pmes.GetCloserPeers()
 			peers := pb.PBPeersToPeerInfos(closer)
-			logger.Debugf("got closer peers: %d %s", len(peers), peers)
+
+			var peerIDs []string
+			for _, p := range peers {
+				peerIDs = append(peerIDs, p.ID.String())
+			}
+			metrics.FPMonitor.GotCloserFrom(key.String(), peerIDs, p.String())
+			logger.Debugf("got closer peers from [%s]: [%v]", p, peers)
 
 			routing.PublishQueryEvent(ctx, &routing.QueryEvent{
 				Type:      routing.PeerResponse,
@@ -637,13 +648,13 @@ func (dht *IpfsDHT) FindPeer(ctx context.Context, id peer.ID) (_ peer.AddrInfo, 
 				Type: routing.SendingQuery,
 				ID:   p,
 			})
-
 			pmes, err := dht.findPeerSingle(ctx, p, id)
 			if err != nil {
 				logger.Debugf("error getting closer peers: %s", err)
 				return nil, err
 			}
 			peers := pb.PBPeersToPeerInfos(pmes.GetCloserPeers())
+			logger.Debugf("Got Closer from [%s]: [%v]\n", p, peers)
 
 			// For DHT query command
 			routing.PublishQueryEvent(ctx, &routing.QueryEvent{
