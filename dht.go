@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	mymetrics "metrics"
 	"sync"
 	"time"
 
@@ -679,6 +680,16 @@ func (dht *IpfsDHT) rtPeerLoop(proc goprocess.Process) {
 // If we connect to a peer we already have in the RT but do not exchange a query (rare)
 //    Do Nothing.
 func (dht *IpfsDHT) peerFound(ctx context.Context, p peer.ID, queryPeer bool) {
+	/*
+		/home/quieoo/desktop/IPFS-Benchmarking/local-node/go-libp2p-kad-dht/dht.go   684   github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).peerFound
+		/home/quieoo/desktop/IPFS-Benchmarking/local-node/go-libp2p-kad-dht/dht.go   467   github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).fixLowPeers
+		/home/quieoo/desktop/IPFS-Benchmarking/local-node/go-libp2p-kad-dht/dht.go   453   github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).fixLowPeersRoutine
+		/home/quieoo/go/pkg/mod/github.com/jbenet/goprocess@v0.1.4/impl-mutex.go   134   github.com/jbenet/goprocess.(*process).Go.func1
+		/usr/local/go/src/runtime/asm_amd64.s   1371   runtime.goexit
+	*/
+
+	//mymetrics.PrintStack(20)
+	mymetrics.FPMonitor.FindPeer(p.String())
 	if c := baseLogger.Check(zap.DebugLevel, "peer found"); c != nil {
 		c.Write(zap.String("peer", p.String()))
 	}

@@ -520,7 +520,9 @@ func (dht *IpfsDHT) FindProvidersAsync(ctx context.Context, key cid.Cid, count i
 	peerOut := make(chan peer.AddrInfo, chSize)
 
 	keyMH := key.Hash()
-	metrics.FPMonitor.NewProviderEvent(key, keyMH.String(), dht.self.String())
+
+	cpl := kb.CommonPrefixLen(kb.ConvertKey(string(keyMH)), kb.ConvertPeerID(dht.self))
+	metrics.FPMonitor.NewProviderEvent(key, keyMH.String(), dht.self.String(), cpl)
 	logger.Debugw("finding providers", "cid", key, "mh", keyMH.String())
 	go dht.findProvidersAsyncRoutine(ctx, keyMH, count, peerOut)
 	return peerOut
@@ -547,7 +549,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 			pi := dht.peerstore.PeerInfo(p)
 			select {
 			case peerOut <- pi:
-				metrics.FPMonitor.GotProviderFrom(key.String(), pi.String(), string(dht.self))
+				metrics.FPMonitor.GotProviderFrom(key.String(), pi.String(), dht.self.String())
 			case <-ctx.Done():
 				return
 			}
@@ -567,9 +569,9 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 				Type: routing.SendingQuery,
 				ID:   p,
 			})
-
-			logger.Debugf("send Message_FIND_NODE to [%s], for [%s]", p, key.String())
-			metrics.FPMonitor.SendNodeWant(key.String(), p.String())
+			cpl := kb.CommonPrefixLen(kb.ConvertKey(string(key)), kb.ConvertPeerID(p))
+			logger.Debugf("send Message_FIND_NODE to [%d: %s], for [%s]", cpl, p, key.String())
+			metrics.FPMonitor.SendNodeWant(key.String(), p.String(), cpl)
 			pmes, err := dht.findProvidersSingle(ctx, p, key)
 			metrics.FPMonitor.ReceiveResult(key.String(), p.String())
 			if err != nil {
@@ -603,12 +605,16 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 			closer := pmes.GetCloserPeers()
 			peers := pb.PBPeersToPeerInfos(closer)
 
+			logger.Debugf("got closer from %s\n", p.String())
 			var peerIDs []string
+			var cpls []int
 			for _, p := range peers {
+				cpl := kb.CommonPrefixLen(kb.ConvertKey(string(key)), kb.ConvertPeerID(p.ID))
+				cpls = append(cpls, cpl)
 				peerIDs = append(peerIDs, p.ID.String())
+				logger.Debugf("-----%d: %s", cpl, p.ID.String())
 			}
-			metrics.FPMonitor.GotCloserFrom(key.String(), peerIDs, p.String())
-			logger.Debugf("got closer peers from [%s]: [%v]", p, peers)
+			metrics.FPMonitor.GotCloserFrom(key.String(), peerIDs, p.String(), cpls)
 
 			routing.PublishQueryEvent(ctx, &routing.QueryEvent{
 				Type:      routing.PeerResponse,
