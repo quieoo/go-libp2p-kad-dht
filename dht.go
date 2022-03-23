@@ -707,6 +707,7 @@ func (dht *IpfsDHT) peerFound(ctx context.Context, p peer.ID, queryPeer bool) {
 
 // peerStoppedDHT signals the routing table that a peer is unable to responsd to DHT queries anymore.
 func (dht *IpfsDHT) peerStoppedDHT(ctx context.Context, p peer.ID) {
+	//mymetrics.PrintStack(20)
 	logger.Debugw("peer stopped dht", "peer", p)
 	// A peer that does not support the DHT protocol is dead for us.
 	// There's no point in talking to anymore till it starts supporting the DHT protocol again.

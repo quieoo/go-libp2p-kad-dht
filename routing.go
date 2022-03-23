@@ -507,6 +507,14 @@ func (dht *IpfsDHT) FindProviders(ctx context.Context, c cid.Cid) ([]peer.AddrIn
 // from progressing.
 func (dht *IpfsDHT) FindProvidersAsync(ctx context.Context, key cid.Cid, count int) <-chan peer.AddrInfo {
 	//metrics.PrintStack(20)
+	/*
+		/home/quieoo/desktop/IPFS-Benchmarking/local-node/go-libp2p-kad-dht/routing.go   509   github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).FindProvidersAsync
+		/home/quieoo/desktop/IPFS-Benchmarking/local-node/go-libp2p-kad-dht/dual/dual.go   181   github.com/libp2p/go-libp2p-kad-dht/dual.(*DHT).FindProvidersAsync
+		/home/quieoo/go/pkg/mod/github.com/libp2p/go-libp2p-routing-helpers@v0.2.3/parallel.go   460   github.com/libp2p/go-libp2p-routing-helpers.Parallel.FindProvidersAsync
+		/home/quieoo/go/pkg/mod/github.com/libp2p/go-libp2p-routing-helpers@v0.2.3/tiered.go   96   github.com/libp2p/go-libp2p-routing-helpers.Tiered.FindProvidersAsync
+		/home/quieoo/desktop/IPFS-Benchmarking/local-node/go-bitswap/network/ipfs_impl.go   357   github.com/ipfs/go-bitswap/network.(*impl).FindProvidersAsync.func1
+	*/
+
 	if !dht.enableProviders || !key.Defined() {
 		peerOut := make(chan peer.AddrInfo)
 		close(peerOut)
@@ -582,7 +590,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 			// Add unique providers from request, up to 'count'
 			for _, prov := range provs {
 				dht.maybeAddAddrs(prov.ID, prov.Addrs, peerstore.TempAddrTTL)
-				logger.Debugf("got provider [%s] from [%s]", prov, p)
+				logger.Debugf("got provider [%s] from [%s]", prov.String(), p)
 				if ps.TryAdd(prov.ID) {
 					logger.Debugf("using provider: %s", prov)
 					select {
