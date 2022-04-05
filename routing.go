@@ -399,6 +399,13 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 	} else if !key.Defined() {
 		return fmt.Errorf("invalid cid: undefined")
 	}
+
+	pi := peer.AddrInfo{
+		ID:    dht.self,
+		Addrs: dht.host.Addrs(),
+	}
+	logger.Debugf("making a Provide Reocrd: %s", pi.String())
+
 	keyMH := key.Hash()
 	logger.Debugw("providing", "cid", key, "mh", loggableProviderRecordBytes(keyMH))
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	mymetrics "metrics"
 	"sync"
 	"time"
 
@@ -689,7 +688,6 @@ func (dht *IpfsDHT) peerFound(ctx context.Context, p peer.ID, queryPeer bool) {
 	*/
 
 	//mymetrics.PrintStack(20)
-	mymetrics.FPMonitor.FindPeer(p.String())
 	if c := baseLogger.Check(zap.DebugLevel, "peer found"); c != nil {
 		c.Write(zap.String("peer", p.String()))
 	}

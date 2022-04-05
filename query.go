@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/multiformats/go-multihash"
 	"math"
+	"metrics"
 	"sync"
 	"time"
 
@@ -156,6 +158,14 @@ func (dht *IpfsDHT) runQuery(ctx context.Context, target string, queryFn queryFn
 		})
 		return nil, kb.ErrLookupFailure
 	}
+
+	var seedPeersStr []string
+	for _, s := range seedPeers {
+		seedPeersStr = append(seedPeersStr, s.String())
+	}
+
+	m := multihash.Multihash(target)
+	metrics.FPMonitor.SeedPeers(m.String(), seedPeersStr)
 
 	q := &query{
 		id:         uuid.New(),
@@ -390,6 +400,10 @@ func (q *query) terminate(ctx context.Context, cancel context.CancelFunc, reason
 // queryPeer queries a single peer and reports its findings on the channel.
 // queryPeer does not access the query state in queryPeers!
 func (q *query) queryPeer(ctx context.Context, ch chan<- *queryUpdate, p peer.ID) {
+	logger.Debugf("query peer: %s\n", p)
+	m := multihash.Multihash(q.key)
+	metrics.FPMonitor.QueryPeer(m.String(), p.String())
+
 	defer q.waitGroup.Done()
 	dialCtx, queryCtx := ctx, ctx
 
