@@ -366,6 +366,7 @@ func (dht *IpfsDHT) getValues(ctx context.Context, key string, stopQuery chan st
 					return false
 				}
 			},
+			false,
 		)
 
 		if err != nil {
@@ -438,6 +439,7 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 
 	var exceededDeadline bool
 	peers, err := dht.GetClosestPeers(closerCtx, string(keyMH))
+
 	switch err {
 	case context.DeadlineExceeded:
 		// If the _inner_ deadline has been exceeded but the _outer_
@@ -456,9 +458,11 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 	if err != nil {
 		return err
 	}
-
 	wg := sync.WaitGroup{}
+
+	var ps []peer.ID
 	for p := range peers {
+		ps = append(ps, p)
 		wg.Add(1)
 		go func(p peer.ID) {
 			defer wg.Done()
@@ -470,6 +474,23 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 		}(p)
 	}
 	wg.Wait()
+
+	mincpl := 1024
+	for _, p := range ps {
+		cpl := kb.CommonPrefixLen(kb.ConvertKey(string(keyMH)), kb.ConvertPeerID(p))
+		if cpl < mincpl {
+			mincpl = cpl
+		}
+	}
+	if metrics.CMD_EarlyAbort {
+		if metrics.LastFewProvides.IsFull() {
+			metrics.LastFewProvides.DeQueue()
+		}
+		metrics.LastFewProvides.EnQueue(mincpl)
+	}
+	logger.Debugf("FindTarget: %v, get a larget cpl %d for found candidate", []byte(string(keyMH)), mincpl)
+	//fmt.Printf("FindTarget: %v, get a larget cpl %d for found candidate\n", []byte(string(keyMH)), mincpl)
+
 	if exceededDeadline {
 		return context.DeadlineExceeded
 	}
@@ -642,6 +663,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 		func() bool {
 			return !findAll && ps.Size() >= count
 		},
+		false,
 	)
 
 	if err == nil && ctx.Err() == nil {
@@ -689,6 +711,7 @@ func (dht *IpfsDHT) FindPeer(ctx context.Context, id peer.ID) (_ peer.AddrInfo, 
 		func() bool {
 			return dht.host.Network().Connectedness(id) == network.Connected
 		},
+		false,
 	)
 
 	if err != nil {

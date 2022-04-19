@@ -60,6 +60,9 @@ type query struct {
 
 	// stopFn is used to determine if we should stop the WHOLE disjoint query.
 	stopFn stopFn
+
+	isProvide      bool
+	LastFewMinCPLs *metrics.Queue
 }
 
 type lookupWithFollowupResult struct {
@@ -78,9 +81,9 @@ type lookupWithFollowupResult struct {
 //
 // After the lookup is complete the query function is run (unless stopped) against all of the top K peers from the
 // lookup that have not already been successfully queried.
-func (dht *IpfsDHT) runLookupWithFollowup(ctx context.Context, target string, queryFn queryFn, stopFn stopFn) (*lookupWithFollowupResult, error) {
+func (dht *IpfsDHT) runLookupWithFollowup(ctx context.Context, target string, queryFn queryFn, stopFn stopFn, isProvide bool) (*lookupWithFollowupResult, error) {
 	// run the query
-	lookupRes, err := dht.runQuery(ctx, target, queryFn, stopFn)
+	lookupRes, err := dht.runQuery(ctx, target, queryFn, stopFn, isProvide)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +150,7 @@ processFollowUp:
 	return lookupRes, nil
 }
 
-func (dht *IpfsDHT) runQuery(ctx context.Context, target string, queryFn queryFn, stopFn stopFn) (*lookupWithFollowupResult, error) {
+func (dht *IpfsDHT) runQuery(ctx context.Context, target string, queryFn queryFn, stopFn stopFn, isProvide bool) (*lookupWithFollowupResult, error) {
 	// pick the K closest peers to the key in our Routing table.
 	targetKadID := kb.ConvertKey(target)
 	seedPeers := dht.routingTable.NearestPeers(targetKadID, dht.bucketSize)
@@ -179,7 +182,10 @@ func (dht *IpfsDHT) runQuery(ctx context.Context, target string, queryFn queryFn
 		queryFn:    queryFn,
 		stopFn:     stopFn,
 	}
-
+	if isProvide {
+		q.isProvide = true
+		q.LastFewMinCPLs = metrics.NewQueue(metrics.EarlyAbortCheck)
+	}
 	// run the query
 	q.run()
 
@@ -337,6 +343,50 @@ func (q *query) spawnQuery(ctx context.Context, cause peer.ID, queryPeer peer.ID
 
 func (q *query) isReadyToTerminate(ctx context.Context, nPeersToQuery int) (bool, LookupTerminationReason, []peer.ID) {
 	// give the application logic a chance to terminate
+
+	// fmt.Printf("try to terminate dht searching for target: %v, get a larget cpl %d for found candidate\n", []byte(q.key), mincpl)
+	if metrics.CMD_EarlyAbort && q.isProvide && q.LastFewMinCPLs != nil {
+		// get current min cpl in top K peers
+		CurrentResult := q.constructLookupResult(kb.ConvertKey(q.key))
+		mincpl := 1024
+		for _, p := range CurrentResult.peers {
+			cpl := kb.CommonPrefixLen(kb.ConvertKey(q.key), kb.ConvertPeerID(p))
+			if cpl < mincpl {
+				mincpl = cpl
+			}
+		}
+		// check global min cpl for early abort requirement
+		avgmcpl := metrics.AverageLastFewMinCPLs()
+
+		var formermcpl []int
+		q.LastFewMinCPLs.IterateQueue(func(data int) {
+			formermcpl = append(formermcpl, data)
+		})
+
+		logger.Debugf("%v try early abort with current min cpl %d, former min cpls %v, and average global min cpl %v", []byte(q.key), mincpl, formermcpl, avgmcpl)
+
+		if avgmcpl != 0.0 && float64(mincpl) >= avgmcpl {
+			return true, LookupStopped, nil
+		}
+
+		//check current key's last few min cpls for early abort requirement
+		if q.LastFewMinCPLs.IsFull() {
+			terminate := true
+			q.LastFewMinCPLs.IterateQueue(func(data int) {
+				if mincpl != data {
+					terminate = false
+				}
+			})
+			if terminate {
+				// fmt.Printf("%v early abort for last %d check %d\n", []byte(q.key), metrics.EarlyAbortCheck, mincpl)
+				return true, LookupStopped, nil
+			}
+
+			q.LastFewMinCPLs.DeQueue()
+		}
+		q.LastFewMinCPLs.EnQueue(mincpl)
+	}
+
 	if q.stopFn() {
 		return true, LookupStopped, nil
 	}

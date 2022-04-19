@@ -47,6 +47,7 @@ func (dht *IpfsDHT) GetClosestPeers(ctx context.Context, key string) (<-chan pee
 			return peers, err
 		},
 		func() bool { return false },
+		true,
 	)
 
 	if err != nil {
