@@ -395,6 +395,8 @@ func (dht *IpfsDHT) refreshRTIfNoShortcut(key kb.ID, lookupRes *lookupWithFollow
 
 // Provide makes this node announce that it can provide a value for the given key
 func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err error) {
+	startTime := time.Now()
+
 	if !dht.enableProviders {
 		return routing.ErrNotSupported
 	} else if !key.Defined() {
@@ -493,6 +495,11 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 
 	if exceededDeadline {
 		return context.DeadlineExceeded
+	}
+	if ctx.Err() == nil {
+		metrics.RecordProvide(key.String())
+		// only record those successful provides
+		metrics.UpdateProvideMetric(startTime, key.String())
 	}
 	return ctx.Err()
 }
