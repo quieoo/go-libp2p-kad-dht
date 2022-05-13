@@ -467,9 +467,12 @@ func (q *query) queryPeer(ctx context.Context, ch chan<- *queryUpdate, p peer.ID
 		ch <- &queryUpdate{cause: p, unreachable: []peer.ID{p}}
 		return
 	}
+	metrics.TimerPin[0].UpdateSince(startQuery)
+	timepin := time.Now()
 
 	// send query RPC to the remote peer
 	newPeers, err := q.queryFn(queryCtx, p)
+	metrics.TimerPin[1].UpdateSince(timepin)
 	if err != nil {
 		if queryCtx.Err() == nil {
 			q.dht.peerStoppedDHT(q.dht.ctx, p)
