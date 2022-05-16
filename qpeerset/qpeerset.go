@@ -1,7 +1,9 @@
 package qpeerset
 
 import (
+	"fmt"
 	"math/big"
+	"metrics"
 	"sort"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -13,12 +15,16 @@ type PeerState int
 
 const (
 	// PeerHeard is applied to peers which have not been queried yet.
+	// expDHT: 也就是说，这是还没有 query 的
 	PeerHeard PeerState = iota
 	// PeerWaiting is applied to peers that are currently being queried.
+	// expDHT: 也就是说，这是正在被 Query 的
 	PeerWaiting
 	// PeerQueried is applied to peers who have been queried and a response was retrieved successfully.
+	// expDHT: 收到了回复
 	PeerQueried
 	// PeerUnreachable is applied to peers who have been queried and a response was not retrieved successfully.
+	// expDHT: 没有收到回复
 	PeerUnreachable
 )
 
@@ -53,8 +59,22 @@ func (sqp *sortedQueryPeerset) Swap(i, j int) {
 }
 
 func (sqp *sortedQueryPeerset) Less(i, j int) bool {
-	di, dj := sqp.all[i].distance, sqp.all[j].distance
-	return di.Cmp(dj) == -1
+	// expDHT: 也就是说，我们这里再增加一个对时间的判断！
+	//  或者如果不想改这个，就给之前设置一个评分
+	if !metrics.CMD_PeerRH {
+		di, dj := sqp.all[i].distance, sqp.all[j].distance
+		return di.Cmp(dj) == -1
+	} else {
+		di := metrics.GPeerRH.GetScore(sqp.all[i].distance, sqp.all[i].id.String())
+		dj := metrics.GPeerRH.GetScore(sqp.all[j].distance, sqp.all[j].id.String())
+		fmt.Println("-----------------------------------------")
+		fmt.Printf("distance : \n%v\n%v\nid : \n%v\n%v\n", sqp.all[i].distance, sqp.all[j].distance,
+			sqp.all[i].id, sqp.all[j].id)
+		fmt.Println(di)
+		fmt.Println(dj)
+		fmt.Println("-----------------------------------------")
+		return di.Cmp(dj) == -1
+	}
 }
 
 // NewQueryPeerset creates a new empty set of peers.
@@ -91,6 +111,8 @@ func (qp *QueryPeerset) TryAdd(p, referredBy peer.ID) bool {
 		qp.all = append(qp.all,
 			queryPeerState{id: p, distance: qp.distanceToKey(p), state: PeerHeard, referredBy: referredBy})
 		qp.sorted = false
+		// expDHT: TODO：我们在这个时候要去更新一下参考的时间
+
 		return true
 	}
 }
@@ -99,6 +121,8 @@ func (qp *QueryPeerset) sort() {
 	if qp.sorted {
 		return
 	}
+	// expDHT: 排序！？
+	//  我们要定义 sortedQueryPeerset 中的 Len, Swap, Less 方法
 	sort.Sort((*sortedQueryPeerset)(qp))
 	qp.sorted = true
 }
@@ -125,14 +149,18 @@ func (qp *QueryPeerset) GetReferrer(p peer.ID) peer.ID {
 // It returns n peers or less, if fewer peers meet the condition.
 // The returned peers are sorted in ascending order by their distance to the key.
 func (qp *QueryPeerset) GetClosestNInStates(n int, states ...PeerState) (result []peer.ID) {
+	// expDHT: 谁往 qp 里面添加的内容????????
+	// expDHT: 首先做排序, 关键就在于怎么拍的序
 	qp.sort()
 	m := make(map[PeerState]struct{}, len(states))
 	for i := range states {
 		m[states[i]] = struct{}{}
 	}
 
+	//
 	for _, p := range qp.all {
 		if _, ok := m[p.state]; ok {
+			// expDHT: 是我们想要的 state
 			result = append(result, p.id)
 		}
 	}
