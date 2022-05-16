@@ -615,7 +615,10 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 			cpl := kb.CommonPrefixLen(kb.ConvertKey(string(key)), kb.ConvertPeerID(p))
 			logger.Debugf("send Message_FIND_NODE to [%d: %s], for [%s]", cpl, p, key.String())
 			metrics.FPMonitor.SendNodeWant(key.String(), p.String(), cpl)
+			startT := time.Now()
 			pmes, err := dht.findProvidersSingle(ctx, p, key)
+			tDur := time.Since(startT)
+			metrics.GPeerRH.Update(p.String(), tDur)
 			metrics.FPMonitor.ReceiveResult(key.String(), p.String())
 			if err != nil {
 				return nil, err
