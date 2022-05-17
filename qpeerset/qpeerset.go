@@ -1,7 +1,6 @@
 package qpeerset
 
 import (
-	"fmt"
 	"math/big"
 	"metrics"
 	"sort"
@@ -63,12 +62,13 @@ func (sqp *sortedQueryPeerset) Less(i, j int) bool {
 		old_dj := sqp.all[j].distance
 		di := metrics.GPeerRH.GetScore(sqp.all[i].distance, sqp.all[i].id.String())
 		dj := metrics.GPeerRH.GetScore(sqp.all[j].distance, sqp.all[j].id.String())
-		fmt.Println("-----------------------------------------")
-		fmt.Printf("distance : \n%v\n%v\nid : \n%v\n%v\n", sqp.all[i].distance, sqp.all[j].distance,
-			sqp.all[i].id, sqp.all[j].id)
-		fmt.Println(di)
-		fmt.Println(dj)
-		fmt.Println("-----------------------------------------")
+		//fmt.Println("-----------------------------------------")
+		//fmt.Printf("distance : \n%v\n%v\nid : \n%v\n%v\n", sqp.all[i].distance, sqp.all[j].distance,
+		//	sqp.all[i].id, sqp.all[j].id)
+		//fmt.Println(di)
+		//fmt.Println(dj)
+		//fmt.Println("-----------------------------------------")
+
 		if (old_di.Cmp(old_dj) * di.Cmp(dj)) == -1 {
 			metrics.GPeerRH.Compromise.Inc(1)
 		}
