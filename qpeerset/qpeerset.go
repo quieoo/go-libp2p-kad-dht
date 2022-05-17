@@ -65,6 +65,9 @@ func (sqp *sortedQueryPeerset) Less(i, j int) bool {
 		di, dj := sqp.all[i].distance, sqp.all[j].distance
 		return di.Cmp(dj) == -1
 	} else {
+		old_di := sqp.all[i].distance
+		old_dj := sqp.all[j].distance
+
 		di := metrics.GPeerRH.GetScore(sqp.all[i].distance, sqp.all[i].id.String())
 		dj := metrics.GPeerRH.GetScore(sqp.all[j].distance, sqp.all[j].id.String())
 		fmt.Println("-----------------------------------------")
@@ -73,6 +76,12 @@ func (sqp *sortedQueryPeerset) Less(i, j int) bool {
 		fmt.Println(di)
 		fmt.Println(dj)
 		fmt.Println("-----------------------------------------")
+
+		if (old_di.Cmp(old_dj) * di.Cmp(dj)) == -1 {
+			metrics.GPeerRH.Compromise.Inc(1)
+		}
+		metrics.GPeerRH.AllCmp.Inc(1)
+
 		return di.Cmp(dj) == -1
 	}
 }
