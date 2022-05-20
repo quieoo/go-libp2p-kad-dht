@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	pstore "github.com/libp2p/go-libp2p-peerstore"
 	"metrics"
 	"sync"
 	"time"
@@ -744,4 +745,60 @@ func (dht *IpfsDHT) FindPeer(ctx context.Context, id peer.ID) (_ peer.AddrInfo, 
 	}
 
 	return peer.AddrInfo{}, routing.ErrNotFound
+}
+
+func (dht *IpfsDHT) ProvideTo(ctx context.Context, c cid.Cid, p peer.ID) error {
+	//fmt.Printf("%s: %s ProvideTo %s, with key %s\n",time.Now().String(),dht.SelfID(),p,c)
+	keyMH := c.Hash()
+	mes, err := dht.makeCOWorkerRecord(keyMH)
+	if err != nil {
+		return err
+	}
+	err = dht.sendMessage(ctx, p, mes)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (dht *IpfsDHT) makeCOWorkerRecord(key []byte) (*pb.Message, error) {
+	provs := peer.NewSet()
+
+	providers := dht.ProviderManager.GetProviders(dht.ctx, key)
+	for _, p := range providers {
+		provs.Add(p)
+	}
+	coworkers, ok := dht.coworker.Load(string(key))
+	if ok {
+		for _, p := range coworkers.([]peer.ID) {
+			provs.Add(p)
+		}
+	}
+	provs.Add(dht.self)
+	provinfos := pstore.PeerInfos(dht.peerstore, provs.Peers())
+
+	pmes := pb.NewMessage(pb.Message_PUT_CO_WORKER, key, 0)
+	pmes.ProviderPeers = pb.RawPeerInfosToPBPeers(provinfos)
+	return pmes, nil
+}
+
+func (dht *IpfsDHT) FindProviderFrom(ctx context.Context, c cid.Cid, p peer.ID) ([]peer.ID, error) {
+	//pmes, err := dht.findProvidersSingle(ctx, p, c.Hash()) //向p发送请求MESSAGE_FIND_NODE以及请求的key，并获取回复
+
+	message := pb.NewMessage(pb.Message_GET_CO_WORKER, c.Hash(), 0)
+	pmes, err := dht.sendRequest(ctx, p, message)
+
+	if err != nil {
+		return nil, err
+	}
+	provs := pb.PBPeersToPeerInfos(pmes.GetProviderPeers())
+	pids := []peer.ID{}
+	for _, p := range provs {
+		pids = append(pids, p.ID)
+	}
+	return pids, nil
+}
+
+func (dht *IpfsDHT) SelfID() peer.ID {
+	return dht.self
 }

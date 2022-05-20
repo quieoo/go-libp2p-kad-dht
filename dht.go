@@ -148,6 +148,8 @@ type IpfsDHT struct {
 
 	// configuration variables for tests
 	testAddressUpdateProcessing bool
+
+	coworker *sync.Map
 }
 
 // Assert that IPFS assumptions about interfaces aren't broken. These aren't a
@@ -232,6 +234,8 @@ func New(ctx context.Context, h host.Host, options ...Option) (*IpfsDHT, error) 
 	dht.plk.Unlock()
 
 	dht.proc.Go(dht.populatePeers)
+
+	dht.coworker = new(sync.Map)
 
 	return dht, nil
 }

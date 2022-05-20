@@ -374,3 +374,88 @@ func (dht *IpfsDHT) handleAddProvider(ctx context.Context, p peer.ID, pmes *pb.M
 func convertToDsKey(s []byte) ds.Key {
 	return ds.NewKey(base32.RawStdEncoding.EncodeToString(s))
 }
+
+func (dht *IpfsDHT) handleGetCoWorkers(ctx context.Context, p peer.ID, pmes *pb.Message) (_ *pb.Message, _err error) {
+	key := pmes.GetKey() //be asked to get providers for key
+	if len(key) > 80 {
+		return nil, fmt.Errorf("handleGetProviders key size too large")
+	} else if len(key) == 0 {
+		return nil, fmt.Errorf("handleGetProviders key is empty")
+	}
+
+	resp := pb.NewMessage(pmes.GetType(), pmes.GetKey(), pmes.GetClusterLevel())
+
+	// setup co-workers
+	provs := peer.NewSet()
+	providers := dht.ProviderManager.GetProviders(dht.ctx, key)
+	for _, pro := range providers {
+		provs.Add(pro)
+	}
+	coworkers, ok := dht.coworker.Load(string(key))
+	if ok {
+		for _, pro := range coworkers.([]peer.ID) {
+			provs.Add(pro)
+		}
+	}
+	provs.Add(dht.self)
+	//fmt.Printf("%s handleGetCo-workers from %s, result %v\n",time.Now().String(),p,providers)
+
+	// TODO: pstore.PeerInfos should move to core (=> peerstore.AddrInfos).
+	infos := pstore.PeerInfos(dht.peerstore, provs.Peers())
+	resp.ProviderPeers = pb.PeerInfosToPBPeers(dht.host.Network(), infos)
+
+	return resp, nil
+}
+
+func (dht *IpfsDHT) handleAddCOWorker(ctx context.Context, p peer.ID, pmes *pb.Message) (_ *pb.Message, _err error) {
+	//fmt.Printf("%s: %s handleAdd Co-Worker from %s,\n",time.Now().String(), dht.SelfID(),p)
+	key := pmes.GetKey()
+	if len(key) > 80 {
+		return nil, fmt.Errorf("handleAddProvider key size too large")
+	} else if len(key) == 0 {
+		return nil, fmt.Errorf("handleAddProvider key is empty")
+	}
+
+	logger.Debugf("adding co-worker", "from", p, "key", loggableProviderRecordBytes(key))
+
+	// add provider should use the address given in the message
+	pinfos := pb.PBPeersToPeerInfos(pmes.GetProviderPeers())
+	for _, pi := range pinfos {
+		if pi.ID != p {
+			// we should ignore this provider record! not from originator.
+			// (we should sign them and check signature later...)
+			logger.Debugw("received provider from wrong peer", "from", p, "peer", pi.ID)
+			continue
+		}
+
+		if len(pi.Addrs) < 1 {
+			logger.Debugw("no valid addresses for provider", "from", p)
+			continue
+		}
+
+		if pi.ID != dht.self { // don't add own addrs.
+			// add the received addresses to our peerstore.
+			dht.peerstore.AddAddrs(pi.ID, pi.Addrs, peerstore.ProviderAddrTTL)
+		}
+		//dht.ProviderManager.AddProvider(ctx, key, p)
+		coworkers, ok := dht.coworker.Load(string(key))
+		if !ok {
+			dht.coworker.Store(string(key), []peer.ID{p})
+		} else {
+			coworkers_slice := coworkers.([]peer.ID)
+			alread := false
+			for _, v := range coworkers_slice {
+				if v == p {
+					alread = true
+					break
+				}
+			}
+			if !alread {
+				coworkers_slice = append(coworkers_slice, p)
+				dht.coworker.Store(string(key), coworkers_slice)
+			}
+		}
+	}
+
+	return nil, nil
+}

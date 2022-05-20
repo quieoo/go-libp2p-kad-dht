@@ -4,7 +4,9 @@ package dual
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p-kad-dht/providers"
 	"sync"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -30,6 +32,36 @@ type DHT struct {
 	LAN *dht.IpfsDHT
 }
 
+func (dht *DHT) GetProviderManager() *providers.ProviderManager {
+	return dht.WAN.ProviderManager
+}
+
+func (dht *DHT) ProvideTo(ctx context.Context, c cid.Cid, p peer.ID) error {
+	err2 := dht.LAN.ProvideTo(ctx, c, p)
+	err1 := dht.WAN.ProvideTo(ctx, c, p)
+
+	if err1 != nil && err2 != nil {
+		return errors.New("err1: " + err1.Error() + " err2: " + err2.Error())
+	}
+	return nil
+}
+
+func (dht *DHT) FindProviderFrom(ctx context.Context, c cid.Cid, p peer.ID) ([]peer.ID, error) {
+	result1, err1 := dht.LAN.FindProviderFrom(ctx, c, p)
+	result2, err2 := dht.WAN.FindProviderFrom(ctx, c, p)
+
+	if err1 != nil && err2 != nil {
+		return nil, errors.New("err1: " + err1.Error() + " err2: " + err2.Error())
+	}
+	for _, r := range result2 {
+		result1 = append(result1, r)
+	}
+	return result1, nil
+}
+func (dht *DHT) SelfID() peer.ID {
+	return dht.WAN.SelfID()
+}
+
 // LanExtension is used to differentiate local protocol requests from those on the WAN DHT.
 const LanExtension protocol.ID = "/lan"
 
@@ -41,6 +73,9 @@ var (
 	_ routing.PeerRouting    = (*DHT)(nil)
 	_ routing.PubKeyFetcher  = (*DHT)(nil)
 	_ routing.ValueStore     = (*DHT)(nil)
+
+	// Breaking the layer isolation of DHT
+	_ routing.ProviderManagerRouting = (*DHT)(nil)
 )
 
 var (

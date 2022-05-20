@@ -33,6 +33,9 @@ const (
 	Message_GET_PROVIDERS Message_MessageType = 3
 	Message_FIND_NODE     Message_MessageType = 4
 	Message_PING          Message_MessageType = 5
+
+	Message_PUT_CO_WORKER Message_MessageType = 6
+	Message_GET_CO_WORKER Message_MessageType = 7
 )
 
 var Message_MessageType_name = map[int32]string{
