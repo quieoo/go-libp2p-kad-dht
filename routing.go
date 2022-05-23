@@ -620,6 +620,7 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 			pmes, err := dht.findProvidersSingle(ctx, p, key)
 			tDur := time.Since(startT)
 			metrics.GPeerRH.Update(p.String(), tDur)
+
 			metrics.FPMonitor.ReceiveResult(key.String(), p.String())
 			if err != nil {
 				return nil, err
