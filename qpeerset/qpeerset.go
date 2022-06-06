@@ -1,7 +1,6 @@
 package qpeerset
 
 import (
-	"fmt"
 	"math/big"
 	"metrics"
 	"sort"
@@ -63,17 +62,37 @@ func (sqp *sortedQueryPeerset) Less(i, j int) bool {
 		old_dj := sqp.all[j].distance
 		di := metrics.GPeerRH.GetScore(sqp.all[i].distance, sqp.all[i].id.String())
 		dj := metrics.GPeerRH.GetScore(sqp.all[j].distance, sqp.all[j].id.String())
-		fmt.Println("-----------------------------------------")
-		fmt.Printf("distance : \n%v\n%v\nid : \n%v\n%v\n", sqp.all[i].distance, sqp.all[j].distance,
-			sqp.all[i].id, sqp.all[j].id)
-		fmt.Println(di)
-		fmt.Println(dj)
-		fmt.Println("-----------------------------------------")
-		if (old_di.Cmp(old_dj) * di.Cmp(dj)) == -1 {
+		//fmt.Println("-----------------------------------------")
+		//fmt.Printf("distance : \n%v\n%v\nid : \n%v\n%v\n", sqp.all[i].distance, sqp.all[j].distance,
+		//	sqp.all[i].id, sqp.all[j].id)
+		//fmt.Println(di)
+		//fmt.Println(dj)
+		//fmt.Println("-----------------------------------------")
+
+		//fmt.Println("-----------------------------------------")
+		//fmt.Println("bytes:")
+		//fmt.Println(old_di.Bytes())
+		//fmt.Println(old_dj.Bytes())
+		//fmt.Println("公共前缀数，0的个数: ")
+		//fmt.Println((32-len(old_di.Bytes()))*8 + ks.ZeroPrefixLen(old_di.Bytes()))
+		//fmt.Println((32-len(old_dj.Bytes()))*8 + ks.ZeroPrefixLen(old_dj.Bytes()))
+		//fmt.Println("-----------------------------------------")
+
+		var isLess int
+		if *di < *dj {
+			isLess = -1
+		} else if *di == *dj {
+			isLess = 0
+		} else {
+			isLess = 1
+		}
+
+		if old_di.Cmp(old_dj)*isLess == -1 {
 			metrics.GPeerRH.Compromise.Inc(1)
 		}
 		metrics.GPeerRH.AllCmp.Inc(1)
-		return di.Cmp(dj) == -1
+
+		return isLess == -1
 	}
 }
 
@@ -97,6 +116,7 @@ func (qp *QueryPeerset) find(p peer.ID) int {
 }
 
 func (qp *QueryPeerset) distanceToKey(p peer.ID) *big.Int {
+	// expDHT: 我们 在这里 计算 key 到 target 的距离
 	return ks.XORKeySpace.Key([]byte(p)).Distance(qp.key)
 }
 
