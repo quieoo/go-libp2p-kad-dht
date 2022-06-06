@@ -3,6 +3,7 @@ package dht
 import (
 	"context"
 	"fmt"
+	"metrics"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -24,14 +25,17 @@ func (dht *IpfsDHT) GetClosestPeers(ctx context.Context, key string) (<-chan pee
 	//TODO: I can break the interface! return []peer.ID
 	lookupRes, err := dht.runLookupWithFollowup(ctx, key,
 		func(ctx context.Context, p peer.ID) ([]*peer.AddrInfo, error) {
+
+			timectx, _ := context.WithTimeout(ctx, metrics.QueryPeerTime)
 			// For DHT query command
 			routing.PublishQueryEvent(ctx, &routing.QueryEvent{
 				Type: routing.SendingQuery,
 				ID:   p,
 			})
 
-			pmes, err := dht.findPeerSingle(ctx, p, peer.ID(key))
+			pmes, err := dht.findPeerSingle(timectx, p, peer.ID(key))
 			if err != nil {
+				//cpllogger.Debugf("findPeerSingle error %s", err.Error())
 				logger.Debugf("error getting closer peers: %s", err)
 				return nil, err
 			}
@@ -60,11 +64,9 @@ func (dht *IpfsDHT) GetClosestPeers(ctx context.Context, key string) (<-chan pee
 	for _, p := range lookupRes.peers {
 		out <- p
 	}
-
 	if ctx.Err() == nil && lookupRes.completed {
 		// refresh the cpl for this key as the query was successful
 		dht.routingTable.ResetCplRefreshedAtForID(kb.ConvertKey(key), time.Now())
 	}
-
 	return out, ctx.Err()
 }

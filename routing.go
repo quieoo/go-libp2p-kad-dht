@@ -411,6 +411,8 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 	logger.Debugf("making a Provide Reocrd: %s", pi.String())
 
 	keyMH := key.Hash()
+	cpllogger.Debugf("%s - %s", key, keyMH.HexString())
+
 	logger.Debugw("providing", "cid", key, "mh", loggableProviderRecordBytes(keyMH))
 
 	// add self locally
@@ -462,22 +464,26 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 		return err
 	}
 	wg := sync.WaitGroup{}
-
+	successCount := 0
 	var ps []peer.ID
 	for p := range peers {
 		ps = append(ps, p)
 		wg.Add(1)
+
 		go func(p peer.ID) {
 			defer wg.Done()
 			logger.Debugf("putProvider(%s, %s)", loggableProviderRecordBytes(keyMH), p)
-			err := dht.sendMessage(ctx, p, mes)
+			timectx, _ := context.WithTimeout(ctx, metrics.QueryPeerTime)
+			err := dht.sendMessage(timectx, p, mes)
 			if err != nil {
 				logger.Debug(err)
+			} else {
+				successCount++
 			}
 		}(p)
 	}
 	wg.Wait()
-
+	cpllogger.Debugf("%s, success put %d", key, successCount)
 	mincpl := 1024
 	for _, p := range ps {
 		cpl := kb.CommonPrefixLen(kb.ConvertKey(string(keyMH)), kb.ConvertPeerID(p))
@@ -491,6 +497,7 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 		}
 		metrics.LastFewProvides.EnQueue(mincpl)
 	}
+	cpllogger.Debugf("FOUND %s %d", keyMH.HexString(), mincpl)
 	logger.Debugf("FindTarget: %v, get a larget cpl %d for found candidate", []byte(string(keyMH)), mincpl)
 	//fmt.Printf("FindTarget: %v, get a larget cpl %d for found candidate\n", []byte(string(keyMH)), mincpl)
 
@@ -564,7 +571,6 @@ func (dht *IpfsDHT) FindProvidersAsync(ctx context.Context, key cid.Cid, count i
 	peerOut := make(chan peer.AddrInfo, chSize)
 
 	keyMH := key.Hash()
-
 	cpl := kb.CommonPrefixLen(kb.ConvertKey(string(keyMH)), kb.ConvertPeerID(dht.self))
 	metrics.FPMonitor.NewProviderEvent(key, keyMH.String(), dht.self.String(), cpl)
 	logger.Debugw("finding providers", "cid", key, "mh", keyMH.String())

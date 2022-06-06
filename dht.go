@@ -42,6 +42,7 @@ var (
 	logger     = logging.Logger("dht")
 	baseLogger = logger.Desugar()
 
+	cpllogger       = logging.Logger("seecpl")
 	rtFreezeTimeout = 1 * time.Minute
 )
 

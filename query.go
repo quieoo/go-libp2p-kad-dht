@@ -99,6 +99,11 @@ func (dht *IpfsDHT) runLookupWithFollowup(ctx context.Context, target string, qu
 		}
 	}
 
+	if metrics.CMD_EarlyAbort {
+		lookupRes.completed = true
+		return lookupRes, nil
+	}
+
 	if len(queryPeers) == 0 {
 		return lookupRes, nil
 	}
@@ -126,6 +131,8 @@ processFollowUp:
 	for i := 0; i < len(queryPeers); i++ {
 		select {
 		case <-doneCh:
+			mh := multihash.Multihash(target)
+			cpllogger.Debugf("%s remain: %d", mh.HexString(), len(queryPeers)-followupsCompleted)
 			followupsCompleted++
 			if stopFn() {
 				cancelFollowUp()
@@ -343,8 +350,6 @@ func (q *query) spawnQuery(ctx context.Context, cause peer.ID, queryPeer peer.ID
 
 func (q *query) isReadyToTerminate(ctx context.Context, nPeersToQuery int) (bool, LookupTerminationReason, []peer.ID) {
 	// give the application logic a chance to terminate
-
-	// fmt.Printf("try to terminate dht searching for target: %v, get a larget cpl %d for found candidate\n", []byte(q.key), mincpl)
 	if metrics.CMD_EarlyAbort && q.isProvide && q.LastFewMinCPLs != nil {
 		// get current min cpl in top K peers
 		CurrentResult := q.constructLookupResult(kb.ConvertKey(q.key))
@@ -362,9 +367,8 @@ func (q *query) isReadyToTerminate(ctx context.Context, nPeersToQuery int) (bool
 		q.LastFewMinCPLs.IterateQueue(func(data int) {
 			formermcpl = append(formermcpl, data)
 		})
-
-		logger.Debugf("%v try early abort with current min cpl %d, former min cpls %v, and average global min cpl %v", []byte(q.key), mincpl, formermcpl, avgmcpl)
-
+		mh := multihash.Multihash(q.key)
+		cpllogger.Debugf("%s %d  %v %v", mh.HexString(), mincpl, formermcpl, avgmcpl)
 		if avgmcpl != 0.0 && float64(mincpl) >= avgmcpl {
 			return true, LookupStopped, nil
 		}
@@ -467,12 +471,9 @@ func (q *query) queryPeer(ctx context.Context, ch chan<- *queryUpdate, p peer.ID
 		ch <- &queryUpdate{cause: p, unreachable: []peer.ID{p}}
 		return
 	}
-	metrics.TimerPin[0].UpdateSince(startQuery)
-	timepin := time.Now()
 
 	// send query RPC to the remote peer
 	newPeers, err := q.queryFn(queryCtx, p)
-	metrics.TimerPin[1].UpdateSince(timepin)
 	if err != nil {
 		if queryCtx.Err() == nil {
 			q.dht.peerStoppedDHT(q.dht.ctx, p)
