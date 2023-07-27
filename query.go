@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/multiformats/go-multihash"
 	"math"
 	"metrics"
 	"sync"
 	"time"
+
+	"github.com/multiformats/go-multihash"
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -391,13 +392,34 @@ func (q *query) isReadyToTerminate(ctx context.Context, nPeersToQuery int) (bool
 		q.LastFewMinCPLs.EnQueue(mincpl)
 	}
 
+	// CurrentResult := q.constructLookupResult(kb.ConvertKey(q.key))
+	// mincpl := 1024
+	// for _, p := range CurrentResult.peers {
+	// 	cpl := kb.CommonPrefixLen(kb.ConvertKey(q.key), kb.ConvertPeerID(p))
+	// 	if cpl < mincpl {
+	// 		mincpl = cpl
+	// 	}
+	// }
+	// // check global min cpl for early abort requirement
+	// avgmcpl := metrics.AverageLastFewMinCPLs()
+
+	// var formermcpl []int
+	// q.LastFewMinCPLs.IterateQueue(func(data int) {
+	// 	formermcpl = append(formermcpl, data)
+	// })
+	// mh := multihash.Multihash(q.key)
+	// cpllogger.Debugf("%s %d  %v %v", mh.HexString(), mincpl, formermcpl, avgmcpl)
+
 	if q.stopFn() {
+		// cpllogger.Debugf("stopFN %s", mh.HexString())
 		return true, LookupStopped, nil
 	}
 	if q.isStarvationTermination() {
+		// cpllogger.Debugf("starvation Termination %s", mh.HexString())
 		return true, LookupStarvation, nil
 	}
 	if q.isLookupTermination() {
+		// cpllogger.Debugf("lookupTermination %s", mh.HexString())
 		return true, LookupCompleted, nil
 	}
 
@@ -419,8 +441,10 @@ func (q *query) isReadyToTerminate(ctx context.Context, nPeersToQuery int) (bool
 // From the set of all nodes that are not unreachable,
 // if the closest beta nodes are all queried, the lookup can terminate.
 func (q *query) isLookupTermination() bool {
+
 	peers := q.queryPeers.GetClosestNInStates(q.dht.beta, qpeerset.PeerHeard, qpeerset.PeerWaiting, qpeerset.PeerQueried)
 	for _, p := range peers {
+		// fmt.Printf("isLookupTermination, closest peer start: %s %d-%d\n", p, q.queryPeers.GetState(p), qpeerset.PeerQueried)
 		if q.queryPeers.GetState(p) != qpeerset.PeerQueried {
 			return false
 		}

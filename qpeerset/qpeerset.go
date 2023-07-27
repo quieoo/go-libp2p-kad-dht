@@ -130,7 +130,7 @@ func (qp *QueryPeerset) TryAdd(p, referredBy peer.ID) bool {
 	} else {
 		qp.all = append(qp.all,
 			queryPeerState{id: p, distance: qp.distanceToKey(p), state: PeerHeard, referredBy: referredBy})
-		//fmt.Printf("querySet add (%s,%s,%d)\n", p, referredBy, qp.distanceToKey(p))
+		// fmt.Printf("querySet add (%s,%s,%d)\n", p, referredBy, qp.distanceToKey(p).Int64())
 		qp.sorted = false
 		return true
 	}
@@ -147,6 +147,12 @@ func (qp *QueryPeerset) sort() {
 // SetState sets the state of peer p to s.
 // If p is not in the peerset, SetState panics.
 func (qp *QueryPeerset) SetState(p peer.ID, s PeerState) {
+	// if s == PeerQueried {
+	// 	fmt.Printf("set PeerQueried, %s\n", p)
+	// }
+	// if s == PeerUnreachable {
+	// 	fmt.Printf("set unreachable, %s\n", p)
+	// }
 	qp.all[qp.find(p)].state = s
 }
 
@@ -166,6 +172,7 @@ func (qp *QueryPeerset) GetReferrer(p peer.ID) peer.ID {
 // It returns n peers or less, if fewer peers meet the condition.
 // The returned peers are sorted in ascending order by their distance to the key.
 func (qp *QueryPeerset) GetClosestNInStates(n int, states ...PeerState) (result []peer.ID) {
+	// fmt.Printf("len of qp.all: %d\n", len(qp.all))
 	qp.sort()
 	m := make(map[PeerState]struct{}, len(states))
 	for i := range states {

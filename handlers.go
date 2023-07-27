@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"metrics"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -48,6 +49,14 @@ func (dht *IpfsDHT) handlerForMsgType(t pb.Message_MessageType) dhtHandler {
 		}
 	}
 
+	if metrics.EnablePbitswap {
+		switch t {
+		case pb.Message_GET_CO_WORKER:
+			return dht.handleGetCoWorkers
+		case pb.Message_PUT_CO_WORKER:
+			return dht.handleAddCOWorker
+		}
+	}
 	return nil
 }
 
@@ -398,7 +407,7 @@ func (dht *IpfsDHT) handleGetCoWorkers(ctx context.Context, p peer.ID, pmes *pb.
 		}
 	}
 	provs.Add(dht.self)
-	//fmt.Printf("%s handleGetCo-workers from %s, result %v\n",time.Now().String(),p,providers)
+	// fmt.Printf("%s handleGetCo-workers from %s, result %v\n", time.Now().String(), p, providers)
 
 	// TODO: pstore.PeerInfos should move to core (=> peerstore.AddrInfos).
 	infos := pstore.PeerInfos(dht.peerstore, provs.Peers())
@@ -408,7 +417,7 @@ func (dht *IpfsDHT) handleGetCoWorkers(ctx context.Context, p peer.ID, pmes *pb.
 }
 
 func (dht *IpfsDHT) handleAddCOWorker(ctx context.Context, p peer.ID, pmes *pb.Message) (_ *pb.Message, _err error) {
-	//fmt.Printf("%s: %s handleAdd Co-Worker from %s,\n",time.Now().String(), dht.SelfID(),p)
+	// fmt.Printf("%s: %s handleAdd Co-Worker from %s,\n", time.Now().String(), dht.SelfID(), p)
 	key := pmes.GetKey()
 	if len(key) > 80 {
 		return nil, fmt.Errorf("handleAddProvider key size too large")

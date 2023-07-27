@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	pstore "github.com/libp2p/go-libp2p-peerstore"
 	"metrics"
 	"sync"
 	"time"
+
+	pstore "github.com/libp2p/go-libp2p-peerstore"
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -438,6 +439,7 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 			deadline = deadline.Add(-time.Second)
 		}
 		var cancel context.CancelFunc
+		// fmt.Printf("deadline: %d s\n", deadline.Second())
 		closerCtx, cancel = context.WithDeadline(ctx, deadline)
 		defer cancel()
 	}
@@ -473,7 +475,7 @@ func (dht *IpfsDHT) Provide(ctx context.Context, key cid.Cid, brdcst bool) (err 
 		go func(p peer.ID) {
 			defer wg.Done()
 			logger.Debugf("putProvider(%s, %s)", loggableProviderRecordBytes(keyMH), p)
-			timectx, _ := context.WithTimeout(ctx, metrics.QueryPeerTime)
+			timectx, _ := context.WithTimeout(ctx, time.Second*time.Duration(metrics.QueryPeerTime))
 			err := dht.sendMessage(timectx, p, mes)
 			if err != nil {
 				logger.Debug(err)
@@ -625,7 +627,9 @@ func (dht *IpfsDHT) findProvidersAsyncRoutine(ctx context.Context, key multihash
 			startT := time.Now()
 			pmes, err := dht.findProvidersSingle(ctx, p, key)
 			tDur := time.Since(startT)
-			metrics.GPeerRH.Update(p.String(), tDur)
+			if metrics.CMD_PeerRH {
+				metrics.GPeerRH.Update(p.String(), tDur)
+			}
 
 			metrics.FPMonitor.ReceiveResult(key.String(), p.String())
 			if err != nil {
@@ -794,7 +798,7 @@ func (dht *IpfsDHT) makeCOWorkerRecord(key []byte) (*pb.Message, error) {
 
 func (dht *IpfsDHT) FindProviderFrom(ctx context.Context, c cid.Cid, p peer.ID) ([]peer.ID, error) {
 	//pmes, err := dht.findProvidersSingle(ctx, p, c.Hash()) //向p发送请求MESSAGE_FIND_NODE以及请求的key，并获取回复
-
+	// fmt.Printf("FintProviderFrom: %s\n", p)
 	message := pb.NewMessage(pb.Message_GET_CO_WORKER, c.Hash(), 0)
 	pmes, err := dht.sendRequest(ctx, p, message)
 
@@ -804,6 +808,7 @@ func (dht *IpfsDHT) FindProviderFrom(ctx context.Context, c cid.Cid, p peer.ID) 
 	provs := pb.PBPeersToPeerInfos(pmes.GetProviderPeers())
 	pids := []peer.ID{}
 	for _, p := range provs {
+		// fmt.Printf("	find provider:%s\n", p.ID)
 		pids = append(pids, p.ID)
 	}
 	return pids, nil

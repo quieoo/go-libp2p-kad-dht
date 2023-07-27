@@ -26,18 +26,22 @@ func (dht *IpfsDHT) GetClosestPeers(ctx context.Context, key string) (<-chan pee
 	lookupRes, err := dht.runLookupWithFollowup(ctx, key,
 		func(ctx context.Context, p peer.ID) ([]*peer.AddrInfo, error) {
 
-			timectx, _ := context.WithTimeout(ctx, metrics.QueryPeerTime)
+			timectx, _ := context.WithTimeout(ctx, time.Duration(metrics.QueryPeerTime)*time.Second)
 			// For DHT query command
 			routing.PublishQueryEvent(ctx, &routing.QueryEvent{
 				Type: routing.SendingQuery,
 				ID:   p,
 			})
-
+			startT := time.Now()
 			pmes, err := dht.findPeerSingle(timectx, p, peer.ID(key))
 			if err != nil {
 				//cpllogger.Debugf("findPeerSingle error %s", err.Error())
 				logger.Debugf("error getting closer peers: %s", err)
 				return nil, err
+			}
+			tDur := time.Since(startT)
+			if metrics.CMD_PeerRH {
+				metrics.GPeerRH.Update(p.String(), tDur)
 			}
 			peers := pb.PBPeersToPeerInfos(pmes.GetCloserPeers())
 
